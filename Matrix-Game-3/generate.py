@@ -32,6 +32,18 @@ def _validate_args(args):
     if args.sample_guide_scale is None:
         args.sample_guide_scale = cfg.sample_guide_scale
 
+    if args.debug_dump_max_steps <= 0:
+        raise ValueError("--debug_dump_max_steps must be a positive integer.")
+
+    if args.debug_dump_steps and args.debug_dump_dir is None:
+        args.debug_dump_dir = os.path.join(
+            args.output_dir,
+            f"{args.save_name}_debug_dump",
+        )
+
+    if args.debug_dump_dir is not None:
+        args.debug_dump_dir = os.path.abspath(args.debug_dump_dir)
+
     args.seed = args.seed if args.seed >= 0 else random.randint(
         0, sys.maxsize)
 
@@ -61,6 +73,9 @@ def _parse_args():
     parser.add_argument("--sample_shift", type=float, default=None, help="Sampling shift factor for flow matching schedulers.")
     parser.add_argument("--sample_guide_scale", type=float, default=5.0, help="Classifier free guidance scale.")
     parser.add_argument('--num_inference_steps', type=int, default=50)
+    parser.add_argument("--debug_dump_steps", action="store_true", default=False, help="Enable per-step diffusion debug dumps.")
+    parser.add_argument("--debug_dump_dir", type=str, default=None, help="Directory for diffusion debug dump artifacts.")
+    parser.add_argument("--debug_dump_max_steps", type=int, default=50, help="Maximum number of diffusion steps to dump.")
 
     # VAE
     parser.add_argument('--lightvae_pruning_rate', type=float, default=None, help='Pruning rate for lightvae_wan22. If unset, infer dynamically from checkpoint.')

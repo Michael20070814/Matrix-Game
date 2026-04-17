@@ -24,6 +24,7 @@ from wan.modules.vae2_2 import Wan2_2_VAE
 from wan.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from utils.visualize import process_video
 from utils.cam_utils import compute_relative_poses, select_memory_idx_fov, get_intrinsics, _interpolate_camera_poses_handedness
+from utils.debug_dump import MatrixGame3DebugDumper
 from utils.utils import get_data, build_plucker_from_c2ws, build_plucker_from_pose, compute_all_poses_from_actions, get_extrinsics
 from utils.conditions import Bench_actions_universal
 from pipeline.vae_worker import start_vae_worker_process
@@ -467,6 +468,8 @@ class MatrixGame3Pipeline:
         if self.sp_size > 1:
             max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
 
+        debug_dumper = MatrixGame3DebugDumper.from_args(args, rank=self.rank)
+
         with torch.no_grad():
             total_frames = 0
             all_latents_list = []
@@ -664,7 +667,7 @@ class MatrixGame3Pipeline:
                     "predict_latent_idx": (latent_start_idx, latent_end_idx),
                 }
                     
-                for _, t in enumerate(tqdm(timesteps, disable=(self.rank != 0))):
+                for step_in_clip, t in enumerate(tqdm(timesteps, disable=(self.rank != 0))):
                     latent_model_input = latents
 
                     timestep = latents.new_full((latents.shape[2], latents.shape[3] * latents.shape[4] // 4), t)
@@ -692,9 +695,26 @@ class MatrixGame3Pipeline:
                     else:
                         noise_pred = self.model(**model_kwargs)
 
+                    debug_mask = None
+                    if debug_dumper.should_dump():
+                        debug_mask = latent_model_input.new_zeros((latent_model_input.shape[2],))
+                        debug_mask[:img_cond.shape[2]] = 1
+
                     latents = test_scheduler.step(
                         noise_pred, t, latents, return_dict=False)[0]
                     latents = torch.cat([img_cond, latents[:,:,img_cond.shape[2]:]], dim=2)
+
+                    if debug_mask is not None:
+                        debug_dumper.dump_step(
+                            clip_index=clip_idx,
+                            clip_step_index=step_in_clip,
+                            timestep=t,
+                            latent_before=latent_model_input,
+                            noise_pred=noise_pred,
+                            latent_after=latents,
+                            fixed_latent_frames=img_cond.shape[2],
+                            mask=debug_mask,
+                        )
                                  
                 img_cond = latents[:, :, -4:]
                 denoised_pred = latents if first_clip else latents[:, :, -10:]
@@ -806,4 +826,5 @@ class MatrixGame3Pipeline:
             if dist.is_initialized():
                 dist.barrier()
                 dist.destroy_process_group()
+            debug_dumper.close()
             exit()
