@@ -32,7 +32,7 @@ def _matrix_game3_forward_value_probe(value: Any) -> Any:
         return {
             "type": type(value).__name__,
             "len": len(value),
-            "head": list(value[:8]),
+            "head": [_matrix_game3_forward_value_probe(item) for item in value[:8]],
         }
     if isinstance(value, dict):
         return {k: _matrix_game3_forward_value_probe(v) for k, v in value.items()}
