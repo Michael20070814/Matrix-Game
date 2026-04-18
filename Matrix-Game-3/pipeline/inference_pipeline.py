@@ -426,6 +426,7 @@ class MatrixGame3Pipeline:
             max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
 
         debug_dumper = MatrixGame3DebugDumper.from_args(args, rank=self.rank)
+        debug_step_index = 0
 
         with torch.no_grad():
             total_frames = 0
@@ -591,37 +592,60 @@ class MatrixGame3Pipeline:
                         "seq_len": max_seq_len,
                         **conditions_null
                     }
+                    should_dump_step = debug_dumper.should_dump_step(debug_step_index)
+                    if should_dump_step:
+                        fixed_latent_frames = int(img_cond.shape[2])
+                        mask = debug_dumper.build_mask(
+                            total_latent_frames=int(latent_model_input.shape[2]),
+                            fixed_latent_frames=fixed_latent_frames,
+                            device=latent_model_input.device,
+                            dtype=latent_model_input.dtype,
+                        )
+                        latent_before = latent_model_input.detach().clone()
+                        forward_kwargs_cond = debug_dumper.probe_forward_kwargs(model_kwargs)
+                        forward_kwargs_uncond = debug_dumper.probe_forward_kwargs(model_kwargs_null)
+                    else:
+                        fixed_latent_frames = None
+                        mask = None
+                        latent_before = None
+                        forward_kwargs_cond = None
+                        forward_kwargs_uncond = None
+
                     if use_base_model:
-                        noise_pred_full = self.model(**model_kwargs)
-                        noise_pred_null = self.model(**model_kwargs_null)
-                        noise_pred = noise_pred_null + guide_scale * (noise_pred_full - noise_pred_null)
+                        noise_pred_cond = self.model(**model_kwargs)
+                        noise_pred_uncond = self.model(**model_kwargs_null)
+                        noise_pred_guided = noise_pred_uncond + guide_scale * (noise_pred_cond - noise_pred_uncond)
+                        noise_pred = noise_pred_guided
                     else:
                         noise_pred = self.model(**model_kwargs)
+                        noise_pred_cond = noise_pred
+                        noise_pred_uncond = None
+                        noise_pred_guided = noise_pred
 
                     if args is not None and getattr(args, 'use_int8', False) and getattr(args, 'verify_quant', False):
                         if step_in_clip == 0 and self.rank == 0:
                             print(f"\n[Verification] Step {step_in_clip}: noise_pred stats: mean={noise_pred.mean().item():.6f}, std={noise_pred.std().item():.6f}", flush=True)
 
-                    debug_mask = None
-                    if debug_dumper.should_dump():
-                        debug_mask = latent_model_input.new_zeros((latent_model_input.shape[2],))
-                        debug_mask[:img_cond.shape[2]] = 1
-
                     latents = test_scheduler.step(
                         noise_pred, t, latents, return_dict=False)[0]
                     latents = torch.cat([img_cond, latents[:,:,img_cond.shape[2]:]], dim=2)
 
-                    if debug_mask is not None:
+                    if should_dump_step:
                         debug_dumper.dump_step(
-                            clip_index=clip_idx,
-                            clip_step_index=step_in_clip,
+                            step_index=debug_step_index,
                             timestep=t,
-                            latent_before=latent_model_input,
+                            fixed_latent_frames=fixed_latent_frames,
+                            mask=mask,
+                            latent_before=latent_before,
+                            noise_pred_cond=noise_pred_cond,
+                            noise_pred_uncond=noise_pred_uncond,
+                            noise_pred_guided=noise_pred_guided,
                             noise_pred=noise_pred,
                             latent_after=latents,
-                            fixed_latent_frames=img_cond.shape[2],
-                            mask=debug_mask,
+                            forward_kwargs_cond=forward_kwargs_cond,
+                            forward_kwargs_uncond=forward_kwargs_uncond,
                         )
+                    debug_step_index += 1
                                  
                 img_cond = latents[:, :, -4:]
                 denoised_pred = latents if first_clip else latents[:, :, -10:]
