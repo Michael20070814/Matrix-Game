@@ -4,6 +4,8 @@ import argparse
 import logging
 import warnings
 import random
+import time
+import atexit
 import torch
 import torch.distributed as dist
 warnings.filterwarnings('ignore')
@@ -115,11 +117,22 @@ def _init_logging(rank):
 
 def generate(args):
     os.makedirs(args.output_dir, exist_ok=True)
+    start_time = time.perf_counter()
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
     device = local_rank
     _init_logging(rank)
+
+    def log_total_runtime():
+        if rank == 0:
+            elapsed_time = time.perf_counter() - start_time
+            logging.info(
+                f"Total runtime: {elapsed_time:.2f}s "
+                f"({elapsed_time / 60:.2f} min)."
+            )
+
+    atexit.register(log_total_runtime)
     set_seed(args.seed)
 
     if world_size > 1:
