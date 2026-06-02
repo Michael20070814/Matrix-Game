@@ -467,6 +467,22 @@ class MatrixGame3Pipeline:
         if self.sp_size > 1:
             max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
 
+        # Replay-from-file support: when --actions_file is set, build a provider once
+        # (deterministic file read on every rank) and replay it instead of calling
+        # input(). The provider holds full-length conditions/extrinsics and slices
+        # them per clip using the fixed 57 / 40 schedule.
+        actions_file = getattr(args, 'actions_file', None)
+        action_provider = None
+        if actions_file:
+            from utils.action_io import build_replay_provider
+            if self.rank == 0:
+                logging.info(f"Loading replay actions from file: {actions_file}")
+            action_provider = build_replay_provider(
+                actions_file, num_iterations,
+                device=self.device, dtype=weight_dtype,
+                actions_format=getattr(args, 'actions_format', 'json'),
+            )
+
         with torch.no_grad():
             total_frames = 0
             all_latents_list = []
@@ -476,7 +492,17 @@ class MatrixGame3Pipeline:
                 first_clip = (clip_idx == 0)
                 if self.rank == 0:
                     print(f" Iteration {clip_idx + 1}/{num_iterations}", flush=True)
-                    if first_clip:
+                    if action_provider is not None:
+                        # Replay mode: slice precomputed full-length conditions; never
+                        # wait on input(). extrinsics_all is the full sequence up to the
+                        # current clip end (equivalent to the incremental computation).
+                        start, end = action_provider.clip_bounds(clip_idx)
+                        keyboard_condition_curr = action_provider.keyboard_all_full[:, start:end]
+                        mouse_condition_curr = action_provider.mouse_all_full[:, start:end]
+                        keyboard_condition_all = action_provider.keyboard_all_full[:, :end]
+                        mouse_condition_all = action_provider.mouse_all_full[:, :end]
+                        extrinsics_all = action_provider.extrinsics_full[:end]
+                    elif first_clip:
                         action_frames = 57
                         actions = get_current_action()
                         keyboard_condition_curr = actions['keyboard'].repeat(action_frames, 1)

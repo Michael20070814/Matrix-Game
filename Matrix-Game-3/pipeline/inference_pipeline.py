@@ -392,7 +392,20 @@ class MatrixGame3Pipeline:
         generator = torch.Generator(device=self.device).manual_seed(seed)
         num_frames = first_clip_frame + (num_iterations - 1) * 40
 
-        current_image, extrinsics_all, keyboard_condition_all, mouse_condition_all = get_data(num_frames, height, width, pil_image, device=self.device, dtype=weight_dtype)
+        actions_file = getattr(args, 'actions_file', None)
+        if actions_file:
+            # Replay actions from file. All ranks read the same file deterministically,
+            # so the resulting conditions are identical without any broadcast.
+            from utils.action_io import get_data_from_actions_file
+            if self.rank == 0:
+                logging.info(f"Loading replay actions from file: {actions_file}")
+            current_image, extrinsics_all, keyboard_condition_all, mouse_condition_all = get_data_from_actions_file(
+                actions_file, num_iterations, height, width, pil_image,
+                device=self.device, dtype=weight_dtype,
+                actions_format=getattr(args, 'actions_format', 'json'),
+            )
+        else:
+            current_image, extrinsics_all, keyboard_condition_all, mouse_condition_all = get_data(num_frames, height, width, pil_image, device=self.device, dtype=weight_dtype)
         cond = self.text_encoder([text], device = self.device)
         neg_cond = self.text_encoder([self.config.sample_neg_prompt], device = self.device)
 

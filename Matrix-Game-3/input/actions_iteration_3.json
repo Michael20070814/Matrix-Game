@@ -1,0 +1,19 @@
+{
+  "clips": [
+    {
+      "mouse": "u",
+      "keyboard": "w",
+      "frames": 57
+    },
+    {
+      "mouse": "j",
+      "keyboard": "a",
+      "frames": 40
+    },
+    {
+      "mouse": "l",
+      "keyboard": "d",
+      "frames": 40
+    }
+  ]
+}

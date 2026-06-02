@@ -54,6 +54,21 @@ def _validate_args(args):
     if getattr(args, "debug_dump_dir", None) is not None:
         args.debug_dump_dir = os.path.abspath(args.debug_dump_dir)
 
+    if getattr(args, "actions_file", None) is not None:
+        if getattr(args, "actions_format", "json") != "json":
+            raise ValueError(
+                f"--actions_format {args.actions_format!r} is not supported. Only 'json' is supported."
+            )
+        if not os.path.isfile(args.actions_file):
+            raise ValueError(f"--actions_file not found: {args.actions_file}")
+        # Validate the schema / frame counts early so failures are reported before
+        # the (expensive) model load, and identically across all ranks.
+        from utils.action_io import load_action_tensors, ActionFileError
+        try:
+            load_action_tensors(args.actions_file, args.num_iterations, actions_format=args.actions_format)
+        except ActionFileError as exc:
+            raise ValueError(f"Invalid --actions_file: {exc}")
+
     args.seed = args.seed if args.seed >= 0 else random.randint(
         0, sys.maxsize)
 
@@ -102,6 +117,13 @@ def _parse_args():
     parser.add_argument('--fa_version', type=str, default=None, choices=['0', '2', '3'], help='Flash Attention version (2 or 3). Set to 0 to disable.')
     parser.add_argument("--interactive", action="store_true", help="Enable interactive inference.")
     parser.add_argument("--use_base_model", action="store_true", help="Enable base model inference.")
+    # Action-file / replay input
+    parser.add_argument("--actions_file", type=str, default=None,
+                        help="Path to a JSON actions/replay file. When set, disables random "
+                             "action generation (non-interactive) and manual input() "
+                             "(interactive), replaying the file's actions instead.")
+    parser.add_argument("--actions_format", type=str, default="json", choices=["json"],
+                        help="Format of --actions_file. Only 'json' is supported.")
     args = parser.parse_args()
     _validate_args(args)
     return args

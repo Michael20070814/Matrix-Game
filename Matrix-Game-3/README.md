@@ -63,6 +63,73 @@ If you want to use the base model, you can use `--use_base_model --num_inference
 For LightVAE, use `--vae_type mg_lightvae` with `--lightvae_pruning_rate 0.5`, or `--vae_type mg_lightvae_v2` with `--lightvae_pruning_rate 0.75`. `mg_lightvae_v2` is faster than `mg_lightvae` while keeping quality close to the latter.
 With multiple GPUs, you can pass `--use_async_vae --async_vae_warmup_iters 1` to speed up inference (see [`test.sh`](test.sh)).
 
+### Replaying actions from a file (`--actions_file`)
+
+Instead of random actions (non-interactive) or typing actions by hand (`--interactive`),
+you can replay a fixed action sequence from a JSON file:
+
+```sh
+torchrun --nproc_per_node=$NUM_GPUS generate.py --size 704*1280 --ckpt_dir Matrix-Game-3.0 \
+  --num_iterations 3 --num_inference_steps 3 --image demo_images/001/image.png \
+  --prompt "A colorful, animated cityscape." --save_name replay --output_dir ./output \
+  --actions_file my_actions.json
+```
+
+- When `--actions_file` is set, random action generation and manual `input()` are both
+  disabled and the file's actions are used everywhere (overlay, async VAE, final video).
+- It works with **and** without `--interactive`; in interactive mode it never waits for input.
+- All ranks read the same file deterministically, so multi-GPU runs use identical actions.
+- The total frame count must be `57 + (num_iterations - 1) * 40`.
+
+Two JSON schemas are supported.
+
+**Schema A — Tensor format** (frame-level, validated and consumed directly):
+
+```json
+{
+  "keyboard_condition": [[0,0,1,0,0,0], [0,0,1,0,0,0]],
+  "mouse_condition":    [[0.0,-0.1],    [0.0,-0.1]]
+}
+```
+
+`keyboard_condition` must be `[T, 6]`, `mouse_condition` must be `[T, 2]`, with the same
+`T`, and `T == 57 + (num_iterations - 1) * 40`.
+
+**Schema B — Clip format** (token-level, expanded to frames on load):
+
+```json
+{
+  "clips": [
+    {"mouse": "u", "keyboard": "w"},
+    {"mouse": "j", "keyboard": "a"},
+    {"mouse": "u", "keyboard": "d"}
+  ]
+}
+```
+
+With no `frames` field, there must be exactly `num_iterations` clips: clip 0 expands to 57
+frames and each later clip to 40 frames. You may instead give every clip an explicit
+`frames` count, in which case the counts must sum to `57 + (num_iterations - 1) * 40`:
+
+```json
+{
+  "clips": [
+    {"mouse": "u", "keyboard": "w", "frames": 57},
+    {"mouse": "j", "keyboard": "a", "frames": 40},
+    {"mouse": "u", "keyboard": "d", "frames": 40}
+  ]
+}
+```
+
+Supported tokens (identical to interactive mode):
+
+- Mouse — `i` (up), `k` (down), `j` (left), `l` (right), `u` (no move).
+- Keyboard — `w` (forward), `s` (back), `a` (left), `d` (right), `q` (no movement).
+
+A clip that omits `mouse`/`keyboard` defaults to the no-op token (`u`/`q`). Invalid files
+(missing file, bad JSON, wrong schema, wrong shapes, frame/clip-count mismatch, unknown
+tokens) raise a clear error before the model is loaded.
+
 ## ⭐ Acknowledgements
 - [Diffusers](https://github.com/huggingface/diffusers) for their excellent diffusion model framework
 - [Self-Forcing](https://github.com/guandeh17/Self-Forcing) for their excellent work
