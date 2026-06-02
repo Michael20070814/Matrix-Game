@@ -97,6 +97,8 @@ Two JSON schemas are supported.
 
 **Schema B — Clip format** (token-level, expanded to frames on load):
 
+The simplest form has one clip entry per diffusion iteration (default granularity):
+
 ```json
 {
   "clips": [
@@ -107,9 +109,40 @@ Two JSON schemas are supported.
 }
 ```
 
-With no `frames` field, there must be exactly `num_iterations` clips: clip 0 expands to 57
-frames and each later clip to 40 frames. You may instead give every clip an explicit
-`frames` count, in which case the counts must sum to `57 + (num_iterations - 1) * 40`:
+With no `frames` field and no `unit_frames`, there must be exactly `num_iterations` clips:
+clip 0 expands to 57 frames and each later clip to 40 frames (≈ 1–1.4 s each at 40 fps).
+
+**Finer-grained control with `unit_frames`**
+
+For 0.5 s granularity (20 frames at 40 fps), add a top-level `"unit_frames": 20` field.
+Each entry then covers 20 frames; the last entry absorbs the remainder.
+Number of clips required = `ceil(total_frames / unit_frames)`.
+
+```json
+{
+  "unit_frames": 20,
+  "clips": [
+    {"mouse": "u", "keyboard": "w"},
+    {"mouse": "u", "keyboard": "w"},
+    {"mouse": "j", "keyboard": "a"},
+    {"mouse": "j", "keyboard": "a"},
+    {"mouse": "u", "keyboard": "d"}
+  ]
+}
+```
+
+For `num_iterations=2` (total = 97 frames), `unit_frames=20` requires
+`ceil(97/20) = 5` clips (four × 20 frames + one × 17 frames).
+You can also pass the granularity on the command line instead of embedding it in the file:
+
+```sh
+... --actions_file my_actions.json --control_unit_frames 20
+```
+
+Common values at 40 fps: `20` → 0.5 s, `10` → 0.25 s, `40` → 1 s.
+A `unit_frames` key inside the file takes precedence over `--control_unit_frames`.
+
+**Explicit per-clip frames** (full control):
 
 ```json
 {
@@ -121,7 +154,10 @@ frames and each later clip to 40 frames. You may instead give every clip an expl
 }
 ```
 
-Supported tokens (identical to interactive mode):
+Frame counts must sum exactly to `57 + (num_iterations - 1) * 40`.
+Cannot be combined with a top-level `unit_frames` field.
+
+**Supported tokens** (identical to interactive mode):
 
 - Mouse — `i` (up), `k` (down), `j` (left), `l` (right), `u` (no move).
 - Keyboard — `w` (forward), `s` (back), `a` (left), `d` (right), `q` (no movement).

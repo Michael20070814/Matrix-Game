@@ -65,7 +65,11 @@ def _validate_args(args):
         # the (expensive) model load, and identically across all ranks.
         from utils.action_io import load_action_tensors, ActionFileError
         try:
-            load_action_tensors(args.actions_file, args.num_iterations, actions_format=args.actions_format)
+            load_action_tensors(
+                args.actions_file, args.num_iterations,
+                actions_format=args.actions_format,
+                unit_frames=getattr(args, 'control_unit_frames', None),
+            )
         except ActionFileError as exc:
             raise ValueError(f"Invalid --actions_file: {exc}")
 
@@ -124,6 +128,13 @@ def _parse_args():
                              "(interactive), replaying the file's actions instead.")
     parser.add_argument("--actions_format", type=str, default="json", choices=["json"],
                         help="Format of --actions_file. Only 'json' is supported.")
+    parser.add_argument("--control_unit_frames", type=int, default=None,
+                        help="Sub-clip control granularity for clip-format action files: "
+                             "number of video frames each clip entry covers. "
+                             "At 40 fps, 20 = 0.5 s, 10 = 0.25 s, 40 = 1 s. "
+                             "Overridden by a 'unit_frames' key inside the JSON file. "
+                             "When omitted and the file has no 'unit_frames' key, "
+                             "one clip entry = one full diffusion iteration.")
     args = parser.parse_args()
     _validate_args(args)
     return args

@@ -481,6 +481,7 @@ class MatrixGame3Pipeline:
                 actions_file, num_iterations,
                 device=self.device, dtype=weight_dtype,
                 actions_format=getattr(args, 'actions_format', 'json'),
+                unit_frames=getattr(args, 'control_unit_frames', None),
             )
 
         with torch.no_grad():

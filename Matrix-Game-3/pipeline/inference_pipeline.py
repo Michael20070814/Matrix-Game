@@ -403,6 +403,7 @@ class MatrixGame3Pipeline:
                 actions_file, num_iterations, height, width, pil_image,
                 device=self.device, dtype=weight_dtype,
                 actions_format=getattr(args, 'actions_format', 'json'),
+                unit_frames=getattr(args, 'control_unit_frames', None),
             )
         else:
             current_image, extrinsics_all, keyboard_condition_all, mouse_condition_all = get_data(num_frames, height, width, pil_image, device=self.device, dtype=weight_dtype)
