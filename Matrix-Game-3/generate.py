@@ -98,6 +98,7 @@ def _parse_args():
     parser.add_argument("--convert_model_dtype", action="store_true", default=False, help="Whether to convert model paramerters dtype.")
     parser.add_argument('--output_dir', type=str, default="./output")
     parser.add_argument('--save_name', type=str, default="generated_video")
+    parser.add_argument("--export_png_dir", type=str, default=None, help="Optional directory to export generated frames as frame_0000.png, frame_0001.png, ...")
     # Sampling parameters
     parser.add_argument("--sample_shift", type=float, default=None, help="Sampling shift factor for flow matching schedulers.")
     parser.add_argument("--sample_guide_scale", type=float, default=5.0, help="Classifier free guidance scale.")

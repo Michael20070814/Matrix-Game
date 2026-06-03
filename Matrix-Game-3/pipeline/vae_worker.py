@@ -107,8 +107,12 @@ def _save_final_video(all_videos, actual_watch_dir, metadata, mouse_condition, k
     concatenated_video = denormalize_video(torch.concat(all_videos, dim=2)[0])
     if clip_idx is not None:
         output_path = os.path.join(actual_watch_dir, f"{save_name}_current_iteration_{clip_idx}.mp4")
+        png_dir = None
+        if metadata.get("export_png_dir"):
+            png_dir = os.path.join(metadata["export_png_dir"], f"{save_name}_current_iteration_{clip_idx}")
     else:
         output_path = os.path.join(actual_watch_dir, f"{save_name}.mp4")
+        png_dir = metadata.get("export_png_dir")
 
     keyboard_all = keyboard_condition.squeeze(0).float().cpu().numpy()
     mouse_all = mouse_condition.squeeze(0).float().cpu().numpy()
@@ -120,6 +124,7 @@ def _save_final_video(all_videos, actual_watch_dir, metadata, mouse_condition, k
         "assets/images/mouse.png",
         mouse_scale=0.2,
         default_frame_res=(metadata["height"], metadata["width"]),
+        png_dir=png_dir,
     )
 
 

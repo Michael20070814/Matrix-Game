@@ -296,6 +296,7 @@ class MatrixGame3Pipeline:
                         "num_iterations": args.num_iterations if hasattr(args, 'num_iterations') else 12,
                         "compile_vae": getattr(args, 'compile_vae', False),
                         "async_vae_warmup_iters": getattr(args, 'async_vae_warmup_iters', 0),
+                        "export_png_dir": getattr(args, "export_png_dir", None),
                     }
                     meta.update(self.vae_config_dict)
                     (
@@ -776,7 +777,10 @@ class MatrixGame3Pipeline:
                         video_np = np.ascontiguousarray(((rearrange(video[0], "C T H W -> T H W C").float() + 1) * 127.5)
                             .clip(0, 255).cpu().numpy().astype(np.uint8))
                         config = (keyboard_condition_curr.squeeze(0).float().cpu().numpy(), mouse_condition_curr.squeeze(0).float().cpu().numpy())
-                        process_video(video_np.astype(np.uint8), f"{self.output_dir}/{save_name}_current_iteration_{clip_idx}.mp4", config, mouse_icon, mouse_scale=0.2, default_frame_res=(height, width),)
+                        iter_png_dir = None
+                        if getattr(args, "export_png_dir", None):
+                            iter_png_dir = os.path.join(args.export_png_dir, f"{save_name}_current_iteration_{clip_idx}")
+                        process_video(video_np.astype(np.uint8), f"{self.output_dir}/{save_name}_current_iteration_{clip_idx}.mp4", config, mouse_icon, mouse_scale=0.2, default_frame_res=(height, width), png_dir=iter_png_dir)
                         all_videos_list.append(video.cpu())
                         
                 all_latents_list.append(denoised_pred)
@@ -822,6 +826,7 @@ class MatrixGame3Pipeline:
                             mouse_icon,
                             mouse_scale=0.2,
                             default_frame_res=(height, width),
+                            png_dir=getattr(args, "export_png_dir", None),
                         )
                         print(f"Saved concatenated video with {len(all_videos_list)} segments")
                         video = torch.concat(all_videos_list, dim=2)[0]

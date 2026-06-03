@@ -1,6 +1,9 @@
+import os
+
 import cv2
 import numpy as np
 from diffusers.utils import export_to_video
+from PIL import Image
 
 def parse_config(config, default_frame_res=(704, 1280)):
     key_data = {}
@@ -143,7 +146,16 @@ def overlay_icon(frame, icon, position, scale=1.0, rotation=0):
     frame[top_left_y:top_left_y+min_h, top_left_x:top_left_x+min_w] = frame_region
 
 
-def process_video(input_video, output_video, config, mouse_icon_path, mouse_scale=1.0, mouse_rotation=0, default_frame_res=(704, 1280)):
+def export_frames_to_png(frames, output_dir, prefix="frame"):
+    os.makedirs(output_dir, exist_ok=True)
+    for i, frame in enumerate(frames):
+        frame_u8 = np.asarray(frame)
+        if frame_u8.dtype != np.uint8:
+            frame_u8 = np.clip(frame_u8 * 255, 0, 255).round().astype(np.uint8)
+        Image.fromarray(frame_u8).save(os.path.join(output_dir, f"{prefix}_{i:04d}.png"))
+
+
+def process_video(input_video, output_video, config, mouse_icon_path, mouse_scale=1.0, mouse_rotation=0, default_frame_res=(704, 1280), png_dir=None):
     key_data, mouse_data = parse_config(config, default_frame_res)
 
     frame_width = input_video[0].shape[1]
@@ -159,10 +171,15 @@ def process_video(input_video, output_video, config, mouse_icon_path, mouse_scal
         keys = key_data.get(frame_idx, {"W": False, "A": False, "S": False, "D": False, "Sp": False, "Sh": False, "Ct": False})
         mouse_position = mouse_data.get(frame_idx, (frame_width // 2, frame_height // 2))
 
-        draw_keys_on_frame(frame, keys, key_size=(50, 50), spacing=10, bottom_margin=20)
-        overlay_icon(frame, mouse_icon, mouse_position, scale=mouse_scale, rotation=mouse_rotation)
         out_video.append(frame / 255)
         frame_idx += 1
         # print(f"Processing frame {frame_idx}/{frame_count}", end="\r")
-    export_to_video(out_video, output_video, fps=17)
+    if output_video:
+        output_ext = os.path.splitext(output_video)[1]
+        if output_ext:
+            export_to_video(out_video, output_video, fps=17)
+        else:
+            export_frames_to_png(input_video, output_video)
+    if png_dir:
+        export_frames_to_png(input_video, png_dir)
     # print("\nProcessing complete!")
